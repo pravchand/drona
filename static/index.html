@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Belay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rowdies:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
+    <link rel="stylesheet" type="text/css" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Authentication Section -->
+        <div id="auth-section" class="container hide">
+            <div id="login-form">
+                <h2>Login to Belay</h2>
+                <input type="text" id="login-username" placeholder="Username">
+                <input type="password" id="login-password" placeholder="Password">
+                <button id="login-button">Login</button>
+            </div>
+            <div id="signup-form">
+                <h2>Create a new account</h2>
+                <input type="text" id="signup-username" placeholder="Username">
+                <input type="password" id="signup-password" placeholder="Password">
+                <button id="signup-button">Sign Up</button>
+            </div>
+        </div>
+
+        <!-- Main App Section -->
+        <div id="main-app" class="container hide">
+          <header>
+            <div id="profile-section">
+                <span class="material-symbols-outlined">person</span>
+                <span id="username-display"></span>
+            </div>
+        </header>
+    
+            <!-- Sidebar (Channel List) -->
+            <div id="sidebar">
+                <h2>Channels</h2>
+                <ul id="channel-list"></ul>
+                <button id="create-channel-button">Create New Channel</button>
+            </div>
+
+            <!-- Main Content Area -->
+            <div id="main-content" class="hide">
+                <!-- Mobile Back Button for Channels  -->
+                <button id="mobile-channels-back" class="mobile-back-button" style="display: none;">← Channels</button>
+                <!-- Channel Messages -->
+                <div id="channel-messages">
+                    <div class="roomDetail">
+                        <div class="displayRoomName">
+                            <h3>
+                                Chatting in <strong id="roomNameDisplay"></strong>
+                                <a id="editButton"><span class="material-symbols-outlined md-18">edit</span></a>
+                            </h3>
+                        </div>
+                        <div class="editRoomName" style="display: none;">
+                            <h3>
+                                Chatting in <input id="roomNameInput" type="text">
+                                <button id="updateRoomNameButton">Update</button>
+                            </h3>
+                        </div>
+                        <a id="roomInvite" href="#">Invite users to this chat at: /channel/{{ channel_id }}</a>
+                    </div>
+                    <h2 id="current-channel-name"></h2>
+                    <div id="message-list"></div>
+                    <div id="message-input">
+                        <textarea id="new-message" placeholder="Type your message here..."></textarea>
+                        <button id="send-message">Send</button>
+                    </div>
+                </div>
+
+                <!-- Thread Replies -->
+                <div id="thread-replies" class="hide">
+                    <button id="mobile-thread-back" class="mobile-back-button" style="display: none;">← Back to Channel</button>
+                    <h3 style="padding-top: 15px;">Thread</h3>
+                    <button id ="reply-close"> X </button>
+                    <h4>  Message </h4>
+                    <div id="parent-message"></div>
+                    <h4> Replies</h4>
+                    <div id="reply-list"></div>
+                    <div id="reply-input">
+                        <textarea id="new-reply" placeholder="Reply to this thread..."></textarea>
+                        <button id="send-reply">Reply</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Profile Section -->
+        <div id="user-profile" class="container hide">
+            <h2>User Profile</h2>
+            <h3> Your current user name is:</h3>
+            <p id="current-username"> </p>
+            <input type="text" id="update-username" placeholder="New Username">
+            <button id="update-username-button">Update Username</button>
+            <input type="password" id="update-password" placeholder="New Password">
+            <button id="update-password-button">Update Password</button>
+            <button id="logout-button">Logout</button>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
