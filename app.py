@@ -7,6 +7,8 @@ from functools import wraps
 import uuid
 from typing import Optional, Dict, Any
 import os
+from openai import OpenAI
+import parser as p
 
 app = Flask(__name__, static_folder='static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -154,10 +156,11 @@ def login():
     data = request.json
     username = data.get('username')
     password = data.get('password')
-
+    print(username)
+    print(password)
     user = query_db('SELECT * FROM users WHERE username = ?', (username,), one=True)
-    
-    if user and check_password_hash(user['password'], password):
+    print(user['password'])
+    if user and (user['password'] == password):
         # Generate new session token
         session_token = str(uuid.uuid4())
         query_db('UPDATE users SET session_token = ? WHERE id = ?', (session_token, user['id']))
@@ -168,59 +171,6 @@ def login():
         }), 200
     
     return jsonify({"error": "Invalid credentials"}), 401
-
-# Gives a list of channels and the unread counts
-@app.route('/api/channels', methods=['GET'])
-@token_required
-def get_channels(user_id):
-    channels = query_db("""
-        SELECT 
-            c.id AS channel_id, 
-            c.name AS channel_name, 
-            COUNT(m.id) AS unread_count
-        FROM channels c
-        LEFT JOIN messages m 
-            ON c.id = m.channel_id
-            AND m.created_at > COALESCE(
-                (SELECT last_seen_timestamp
-                 FROM user_channel_last_seen
-                 WHERE user_id = ? AND channel_id = c.id),
-                '1970-01-01 00:00:00'
-            )
-            AND m.id NOT IN (
-                SELECT reply_message_id 
-                FROM message_replies 
-                )
-        GROUP BY c.id
-    """, (user_id,))  
-
-    # Return the list of channels with their unread count
-    return jsonify([{
-        'id': channel['channel_id'],
-        'name': channel['channel_name'],
-        'unread_count': channel['unread_count']
-    } for channel in channels]), 200
-
-# Add a new channel
-@app.route('/api/channels', methods=['POST'])
-@token_required
-def create_channel(user_id):
-    data = request.json
-    channel_name = data.get('name')
-
-    # Check if channel name exists
-    existing_channel = query_db('SELECT * FROM channels WHERE name = ?', (channel_name,), one=True)
-    if existing_channel:
-        return jsonify({"error": "Channel name already exists"}), 400
-
-    channel = query_db(
-        'INSERT INTO channels (name, created_by) VALUES (?, ?) RETURNING *', 
-        (channel_name, user_id), 
-        one=True
-    )
-
-    return jsonify(dict(channel)), 201
-
 
 # Change name of a channel
 @app.route('/api/channels/name', methods=['POST'])
@@ -238,122 +188,8 @@ def change_room_name(user_id):
         return jsonify({"message": "Room name updated successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# Get messages and update last seen in the last-seen table
-@app.route('/api/messages/room/<int:room_id>', methods=['GET'])
-@token_required
-def get_messages(user_id, room_id):
-    # Add support for fetching messages after a specific ID
-    after_id = request.args.get('after', type=int)
-
-    # Update last seen timestamp
-    update_last_seen = '''
-        INSERT INTO user_channel_last_seen (user_id, channel_id)
-        VALUES (?, ?)
-        ON CONFLICT(user_id, channel_id) 
-        DO UPDATE SET last_seen_timestamp = CURRENT_TIMESTAMP;
-    '''
-    query_db(update_last_seen, (user_id, room_id))
-
-    # Base query to fetch messages
-    base_query = '''
-        SELECT 
-            m.id, 
-            u.username AS author, 
-            m.content,
-            (SELECT COUNT(*) 
-             FROM message_replies 
-             WHERE original_message_id = m.id) AS reply_count
-        FROM messages AS m 
-        JOIN users AS u ON u.id = m.user_id 
-        WHERE m.channel_id = ? 
-        AND m.id NOT IN (
-            SELECT reply_message_id 
-            FROM message_replies
-        )
-    '''
-
-    # Add condition to fetch only messages after a specific ID
-    if after_id:
-        base_query += ' AND m.id > ?'
-        params = (room_id, after_id)
-    else:
-        params = (room_id,)
-
-    messages = query_db(base_query, params)
     
-    messages_list = [{
-        'id': message['id'],
-        'author': message['author'], 
-        'body': message['content'],
-        'replies': message['reply_count']
-    } for message in messages] if messages else []
-    
-    return jsonify(messages_list)
 
-# Get message details incase the user directly opens a thread 
-@app.route('/api/messages/<int:message_id>', methods=['GET'])
-@token_required
-def get_message_details(user_id, message_id):
-    message = query_db("""
-        SELECT m.content AS message_body, u.username AS author
-        FROM messages m
-        JOIN users u ON m.user_id = u.id
-        WHERE m.id = ?
-    """, (message_id,), one=True)
-    
-    if message:
-        return jsonify({
-            'message_body': message['message_body'],
-            'author': message['author']
-        })
-    else:
-        return jsonify({'error': 'Message not found'}), 404
-
-# Get message replies
-@app.route('/api/messages/<int:message_id>/replies', methods=['GET'])
-@token_required
-def get_replies(user_id, message_id):
-    replies = query_db("""
-        SELECT m.id AS reply_id, m.user_id, u.username AS author, m.content AS reply_content, m.created_at AS reply_date
-        FROM message_replies mr
-        JOIN messages m ON mr.reply_message_id = m.id
-        JOIN users u ON m.user_id = u.id
-        WHERE mr.original_message_id = ?
-        ORDER BY m.created_at ASC
-    """, (message_id,))
-    replies = [{'id':reply['reply_id'],'author': reply['author'], 'reply_content': reply['reply_content'], 'reply_date':reply['reply_date']} for reply in replies] if replies else []
-    return jsonify(replies),200
-
-# @app.route('/api/rooms/<int:room_id>', methods=['GET'])
-# @token_required
-# def get_room(user_id, room_id):
-#     room = query_db('SELECT * FROM rooms WHERE id = ?', (room_id,), one=True)
-#     if not room:
-#         return jsonify({"error": "Room not found"}), 404
-#     response = {'id': room['id'], 'name': room['name']}
-#     return jsonify(response), 200
-
-# @app.route('/api/allrooms/', methods=['GET'])
-# @token_required
-# def all_rooms(user_id):
-#     rooms = query_db('SELECT * FROM rooms')
-#     dict_rows = [dict(row) for row in rooms]
-#     return jsonify(dict_rows), 200
-
-#post a message to a channel(channel and room interchangably used here)
-@app.route('/api/room/messages/post', methods=['POST'])
-@token_required
-def post_message(user_id):
-    data = request.json
-    body = data.get('message_body')
-    room_id = data.get('room_id')
-
-    if not body or not room_id:
-        return jsonify({"error": "message_body and room_id are required"}), 400
-
-    query_db('INSERT INTO messages (user_id, channel_id, content) VALUES (?, ?, ?)', (user_id, room_id, body))
-    return jsonify({"message": "success"}), 200
 
 #username update
 @app.route('/api/profile/username', methods=['POST'])
@@ -371,108 +207,6 @@ def update_username(user_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-#get replies to a message
-@app.route('/api/messages/<int:message_id>/replies', methods=['POST'])
-@token_required
-def post_reply(user_id, message_id):
-    
-    data = request.json
-    reply_content = data.get('content')
-
-    # Validate reply content
-    if not reply_content:
-        return jsonify({'error': 'Content cannot be empty'}), 400
-
-    # Fetch channel_id and original message details
-    original_message = query_db("""
-        SELECT m.channel_id, u.username AS original_author, m.content AS original_content
-        FROM messages m
-        JOIN users u ON m.user_id = u.id
-        WHERE m.id = ?
-    """, (message_id,), one=True)
-    print("original message", original_message)
-    if not original_message:
-        return jsonify({'error': 'Original message not found'}), 404
-
-    channel_id = original_message['channel_id']
-    original_author = original_message['original_author']
-    original_content = original_message['original_content']
-
-    
-    reply = query_db("""
-        INSERT INTO messages (channel_id, user_id, content)
-        VALUES (?, ?, ?) returning id
-    """, (channel_id, user_id, reply_content), one=True)
-
-    reply_id = reply['id']
-    print("reply", reply_id)
-    query_db("""
-        INSERT INTO message_replies (original_message_id, reply_message_id)
-        VALUES (?, ?)
-    """, (message_id, reply_id), one=True)
-
-    return jsonify({
-        'message': 'Reply posted successfully',
-        'reply_id': reply_id,
-        'original_message': {
-            'author': original_author,
-            'content': original_content
-        }
-    }), 201
-
-#post a reaction
-@app.route('/api/messages/<int:message_id>/reactions', methods=['POST'])
-@token_required
-def add_reaction(user_id, message_id):
-    data = request.json
-    reaction = data.get('reaction')
-
-    if not reaction:
-        return jsonify({"error": "Reaction is required"}), 400
-
-    # Check if the reaction already exists for the user
-    existing_reaction = query_db(
-        'SELECT * FROM message_reactions WHERE message_id = ? AND user_id = ? AND reaction = ?',
-        (message_id, user_id, reaction), 
-        one=True
-    )
-
-    if existing_reaction:
-        # Remove reaction if it exists
-        query_db('DELETE FROM message_reactions WHERE id = ?', (existing_reaction['id'],))
-        return jsonify({"message": "Reaction removed"}), 200
-    else:
-        # Add reaction
-        query_db(
-            'INSERT INTO message_reactions (message_id, user_id, reaction) VALUES (?, ?, ?)',
-            (message_id, user_id, reaction)
-        )
-        return jsonify({"message": "Reaction added"}), 201
-
-@app.route('/api/channel/name/<int:channel_id>',methods = ["GET"])
-@token_required
-def get_room_name(user_id,channel_id):
-    name = query_db('SELECT name FROM channels WHERE id = ?',(channel_id,),one= True)
-    return jsonify({"channel_name" : name['name']})
-
-#get message reactions
-@app.route('/api/messages/<int:message_id>/reactions', methods=['GET'])
-@token_required
-def get_reactions(user_id, message_id):
-    reactions = query_db(
-        '''
-        SELECT reaction, GROUP_CONCAT(users.username) AS users
-        FROM message_reactions
-        JOIN users ON users.id = message_reactions.user_id
-        WHERE message_id = ?
-        GROUP BY reaction
-        ''',
-        (message_id,)
-    )
-    if reactions:
-        return jsonify({row['reaction']: row['users'].split(',') for row in reactions}), 200
-    else:
-        return jsonify({}), 200
 
 #update password
 @app.route('/api/profile/password', methods = ['POST'])
@@ -490,14 +224,238 @@ def update_password(user_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
+@app.route('/api/jobs', methods=['GET'])
+@token_required
+def get_jobs(user_id):
+    try:
+        query = """
+            SELECT job_id, company, position, location, salary, description, job_link
+            FROM jobs
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """
+        
+        db = get_db()
+        jobs = db.execute(query, (user_id,)).fetchall()
+        
+        jobs_list = [{
+            'job_id': job['job_id'],
+            'company': job['company'],
+            'position': job['position'],
+            'location': job['location'],
+            'salary': job['salary'],
+            'description': job['description'],
+            'job_link': job['job_link']
+        } for job in jobs]
+        
+        return jsonify({"jobs": jobs_list}), 200
 
-# Not using for this project
-# @app.route('/api/rooms/new', methods=['POST'])
-# @token_required
-# def create_room(user_id):
-#     name = "Unnamed Room " + ''.join(random.choices(string.digits, k=6))
-#     room = query_db('INSERT INTO rooms (name) VALUES (?) RETURNING id, name', [name], one=True)
-#     return jsonify({'id': room["id"], 'name': room['name']})
+    except Exception as e:
+        print(f"Error getting jobs: {str(e)}")
+        return jsonify({"error": "Failed to get jobs"}), 500
+
+@app.route('/api/create_job', methods=['POST'])
+@token_required
+def create_job(user_id):
+    try:
+        job_id = str(uuid.uuid4())
+        
+        query = """
+            INSERT INTO jobs (job_id, user_id, company, position, location, salary, description, job_link)
+            VALUES (?, ?, '', '', '', '', '', '')
+        """
+        
+        db = get_db()
+        db.execute(query, (job_id, user_id))
+        db.commit()
+        
+        return jsonify({"job_id": job_id}), 200
+
+    except Exception as e:
+        print(f"Error creating job: {str(e)}")
+        return jsonify({"error": "Failed to create job"}), 500
+
+@app.route('/api/save_job', methods=['PUT'])
+@token_required
+def save_job(user_id):
+    try:
+        data = request.json
+        job_id = data.get('job_id')
+        
+        query = """
+            UPDATE jobs 
+            SET company = ?, position = ?, location = ?, salary = ?, description = ?, job_link = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE job_id = ? AND user_id = ?
+        """
+        
+        db = get_db()
+        db.execute(query, (
+            data.get('company', ''),
+            data.get('position', ''),
+            data.get('location', ''),
+            data.get('salary', ''),
+            data.get('description', ''),
+            data.get('job_link', ''),
+            job_id,
+            user_id
+        ))
+        db.commit()
+        
+        return jsonify({"message": "Job updated successfully"}), 200
+
+    except Exception as e:
+        print(f"Error saving job: {str(e)}")
+        return jsonify({"error": "Failed to save job"}), 500
+
+@app.route('/api/delete_job/<job_id>', methods=['DELETE'])
+@token_required
+def delete_job(user_id, job_id):
+    try:
+        job = query_db('SELECT * FROM jobs WHERE job_id = ? AND user_id = ?', (job_id, user_id), one=True)
+        if not job:
+            return jsonify({'success': False, 'message': 'Job not found'}), 404
+
+        query_db('DELETE FROM jobs WHERE job_id = ? AND user_id = ?', (job_id, user_id))
+        return jsonify({'success': True, 'message': 'Job deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+
+@app.route('/api/parse_job', methods=['POST'])
+@token_required
+def parse_job(user_id):
+    try:
+        data = request.json
+        job_link = data.get('job_link')
+        
+        # Use the parser to extract job details
+        parsed_data = p.get_parsed_jobs(job_link)
+        if not parsed_data:
+            return jsonify({"error": "Failed to parse job details"}), 400
+
+        job_id = str(uuid.uuid4())
+        
+        query = """
+            INSERT INTO jobs (job_id, user_id, company, position, location, salary, description, job_link)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        db = get_db()
+        db.execute(query, (
+            job_id, 
+            user_id, 
+            parsed_data.get('company', ''),
+            parsed_data.get('position', ''),
+            parsed_data.get('location', ''),
+            parsed_data.get('salary', ''),
+            parsed_data.get('description', ''),
+            job_link
+        ))
+        db.commit()
+        
+        return jsonify({
+            "job_id": job_id,
+            "company": parsed_data.get('company', ''),
+            "position": parsed_data.get('position', ''),
+            "location": parsed_data.get('location', ''),
+            "salary": parsed_data.get('salary', ''),
+            "description": parsed_data.get('description', ''),
+            "job_link": job_link
+        }), 200
+
+    except Exception as e:
+        print(f"Error parsing job: {str(e)}")
+        return jsonify({"error": "Failed to parse job"}), 500
+
+@app.route('/api/networks', methods=['GET'])
+@token_required
+def get_networks(user_id):
+    try:
+        networks = query_db(
+            'SELECT * FROM networks WHERE user_id = ? ORDER BY created_at DESC',
+            (user_id,)
+        )
+        return jsonify({
+            'networks': [
+                {
+                    'network_id': network['network_id'],
+                    'name': network['name'],
+                    'position': network['position'],
+                    'company': network['company'],
+                    'email': network['email'],
+                    'linkedin': network['linkedin'],
+                    'notes': network['notes'],
+                    'created_at': network['created_at'],
+                } for network in networks
+            ]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/networks', methods=['POST'])
+@token_required
+def create_network(user_id):
+    data = request.json
+    network_id = str(uuid.uuid4())
+    name = data.get('name')
+    position = data.get('position', '')
+    company = data.get('company', '')
+    email = data.get('email', '')
+    linkedin = data.get('linkedin', '')
+    notes = data.get('notes', '')
+
+    if not name:
+        return jsonify({'error': 'Network name is required'}), 400
+
+    try:
+        query_db(
+            'INSERT INTO networks (network_id, user_id, name, position, company, email, linkedin, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            (network_id, user_id, name, position, company, email, linkedin, notes)
+        )
+        return jsonify({
+            'network_id': network_id,
+            'name': name,
+            'position': position,
+            'company': company,
+            'email': email,
+            'linkedin': linkedin,
+            'notes': notes
+        }), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/networks/<network_id>', methods=['PUT'])
+@token_required
+def update_network(user_id, network_id):
+    data = request.json
+    name = data.get('name')
+    position = data.get('position', '')
+    company = data.get('company', '')
+    email = data.get('email', '')
+    linkedin = data.get('linkedin', '')
+    notes = data.get('notes', '')
+
+    if not name:
+        return jsonify({'error': 'Network name is required'}), 400
+
+    try:
+        query_db(
+            'UPDATE networks SET name = ?, position = ?, company = ?, email = ?, linkedin = ?, notes = ? WHERE network_id = ? AND user_id = ?',
+            (name, position, company, email, linkedin, notes, network_id, user_id)
+        )
+        return jsonify({'message': 'Network updated successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/networks/<network_id>', methods=['DELETE'])
+@token_required
+def delete_network(user_id, network_id):
+    try:
+        query_db('DELETE FROM networks WHERE network_id = ? AND user_id = ?', (network_id, user_id))
+        return jsonify({'message': 'Network deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, port = 8000)

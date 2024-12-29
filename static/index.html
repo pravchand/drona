@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Belay</title>
+    <title>Drona</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Rowdies:wght@300;400;700&display=swap" rel="stylesheet">
@@ -15,7 +15,7 @@
         <!-- Authentication Section -->
         <div id="auth-section" class="container hide">
             <div id="login-form">
-                <h2>Login to Belay</h2>
+                <h2>Login to Drona</h2>
                 <input type="text" id="login-username" placeholder="Username">
                 <input type="password" id="login-password" placeholder="Password">
                 <button id="login-button">Login</button>
@@ -30,62 +30,106 @@
 
         <!-- Main App Section -->
         <div id="main-app" class="container hide">
-          <header>
-            <div id="profile-section">
-                <span class="material-symbols-outlined">person</span>
-                <span id="username-display"></span>
-            </div>
-        </header>
+
     
-            <!-- Sidebar (Channel List) -->
+            <!-- Sidebar (menu List) -->
             <div id="sidebar">
-                <h2>Channels</h2>
-                <ul id="channel-list"></ul>
-                <button id="create-channel-button">Create New Channel</button>
+
+                    <div id="profile-section">
+                        <span class="material-symbols-outlined">person</span>
+                        <span id="username-display"></span>
+                    </div>
+
+                <h2>Menu</h2>
+                <div class="sidebar">
+                    <ul class="sidebar-menu">
+                        <li data-page="network" onclick="showMain(this)">Network</li>
+                        <li data-page="jobs" onclick="showMain(this)">Jobs</li>
+                        <li data-page="applied" >Applied</li>
+                        <li data-page="materials" >Materials</li>
+                    </ul>
+                </div>
             </div>
 
             <!-- Main Content Area -->
             <div id="main-content" class="hide">
+                <div id="network-page" class= "hide">
+                    <h1>Professional Network</h1>
+                    <p>Track and manage your contacts to help with your job applications.</p>
+                    
+                    <input type="text" id="search-bar" placeholder="Search by name, company, or position" />
+                    <button id="add-contact-btn">Add Contact</button>
+                    
+                    <table id="contacts-table">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Position</th>
+                          <th>Company</th>
+                          <th>Email</th>
+                          <th>LinkedIn</th>
+                          <th>Notes</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <!-- Contact rows will be dynamically added here -->
+                      </tbody>
+                    </table>
+                    
+                    <!-- Add Contact Form -->
+                    <div id="contact-form" style="display: none;">
+                      <h3>Add New Contact</h3>
+                      <label>Name: <input type="text" id="name" /></label>
+                      <label>Position: <input type="text" id="position" /></label>
+                      <label>Company: <input type="text" id="company" /></label>
+                      <label>Email: <input type="email" id="email" /></label>
+                      <label>LinkedIn: <input type="url" id="linkedin" /></label>
+                      <label>Notes: <textarea id="notes"></textarea></label>
+                      <button id="save-contact">Save</button>
+                      <button id="cancel-contact">Cancel</button>
+                    </div>
+                  </div>
+                  
                 <!-- Mobile Back Button for Channels  -->
                 <button id="mobile-channels-back" class="mobile-back-button" style="display: none;">← Channels</button>
-                <!-- Channel Messages -->
-                <div id="channel-messages">
-                    <div class="roomDetail">
-                        <div class="displayRoomName">
-                            <h3>
-                                Chatting in <strong id="roomNameDisplay"></strong>
-                                <a id="editButton"><span class="material-symbols-outlined md-18">edit</span></a>
-                            </h3>
-                        </div>
-                        <div class="editRoomName" style="display: none;">
-                            <h3>
-                                Chatting in <input id="roomNameInput" type="text">
-                                <button id="updateRoomNameButton">Update</button>
-                            </h3>
-                        </div>
-                        <a id="roomInvite" href="#">Invite users to this chat at: /channel/{{ channel_id }}</a>
+                <!-- jobs table -->
+                <div id="jobs-table">
+                    <div class="container">
+                        <button id="addRowBtn" class="add-row-btn">Add Job through AI</button>
+                        <table id="jobsTable" class="w-full">
+                            <thead>
+                                <tr>
+                                    <th>Company</th>
+                                    <th>Position</th>
+                                    <th>Location</th>
+                                    <th>Salary</th>
+                                    <th>Description</th>
+                                    <th>Job Link</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobsTableBody">
+                                <!-- Job rows will be dynamically inserted here -->
+                            </tbody>
+                        </table>
+                        <button onclick="addRow()">Add Row</button>
+                        <br><br>
                     </div>
-                    <h2 id="current-channel-name"></h2>
-                    <div id="message-list"></div>
-                    <div id="message-input">
-                        <textarea id="new-message" placeholder="Type your message here..."></textarea>
-                        <button id="send-message">Send</button>
-                    </div>
+                
                 </div>
-
-                <!-- Thread Replies -->
-                <div id="thread-replies" class="hide">
+                
+                <!-- Job Parser -->
+                <div id="ai-parser" class="hide">
                     <button id="mobile-thread-back" class="mobile-back-button" style="display: none;">← Back to Channel</button>
-                    <h3 style="padding-top: 15px;">Thread</h3>
-                    <button id ="reply-close"> X </button>
-                    <h4>  Message </h4>
-                    <div id="parent-message"></div>
-                    <h4> Replies</h4>
-                    <div id="reply-list"></div>
-                    <div id="reply-input">
-                        <textarea id="new-reply" placeholder="Reply to this thread..."></textarea>
-                        <button id="send-reply">Reply</button>
+                    <h3 style="padding-top: 15px;">Parser</h3>
+                    <button id ="parser-close"> X </button>
+                    <h4> Parse</h4>
+                    <div id="job-input">
+                        <input type="url" id="jobLinkInput" placeholder="Paste job link here" required>
+                        <button id="parse-job">Parse</button>
                     </div>
+                    <div id="parsingStatus" class="parsing-status"></div>
                 </div>
             </div>
         </div>
@@ -102,6 +146,8 @@
             <button id="logout-button">Logout</button>
         </div>
     </div>
+    
+      
 
     <script src="/static/app.js"></script>
 </body>
