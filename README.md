@@ -60,15 +60,6 @@ The database will be automatically initialized on first run.
 - `PUT /api/networks/<network_id>` - Update network
 - `DELETE /api/networks/<network_id>` - Delete network
 
-## Project Structure
-
-drona/
-├── static/ # Frontend files
-├── db/ # Database & migrations
-├── app.py # Main application
-├── parser.py # Parsing utilities
-└── requirements.txt # Dependencies
-
 
 ## Contributing
 
